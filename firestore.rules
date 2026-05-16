@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isAdmin() { return isSignedIn() && (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) || request.auth.token.email == 'AtaullahAtakalimi@gmail.com'); }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['username', 'createdAt'])
+        && data.username is string && data.username.size() > 0 && data.username.size() <= 64
+        && data.createdAt == request.time
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 500))
+        && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 2000))
+        && (!('isAdmin' in data) || data.isAdmin == false);
+    }
+    
+    function isValidVideo(data) {
+       return data.keys().hasAll(['userId', 'videoUrl', 'createdAt'])
+          && data.userId == request.auth.uid
+          && data.videoUrl is string && data.videoUrl.size() <= 2000
+          && data.createdAt == request.time
+          && (!('description' in data) || (data.description is string && data.description.size() <= 500));
+    }
+
+    function isValidLike(data) {
+       return data.keys().hasAll(['userId', 'createdAt'])
+          && data.userId == request.auth.uid
+          && data.createdAt == request.time;
+    }
+
+    function isValidComment(data) {
+       return data.keys().hasAll(['userId', 'text', 'createdAt'])
+          && data.userId == request.auth.uid
+          && data.text is string && data.text.size() > 0 && data.text.size() <= 1000
+          && data.createdAt == request.time;
+    }
+    
+    function isValidFollow(data, followerIdStr, followingIdStr) {
+       return data.keys().hasAll(['followerId', 'followingId', 'createdAt'])
+          && data.followerId == followerIdStr
+          && data.followingId == followingIdStr
+          && data.createdAt == request.time;
+    }
+
+    function isValidChat(data) {
+       return data.keys().hasAll(['participants', 'updatedAt'])
+        && data.participants is list
+        && data.participants.size() >= 2 && data.participants.size() <= 10
+        && request.auth.uid in data.participants
+        && data.updatedAt == request.time
+        && (!('lastMessage' in data) || (data.lastMessage is string && data.lastMessage.size() <= 1000));
+    }
+    
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'text', 'createdAt'])
+        && data.senderId == request.auth.uid
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 1000
+        && data.createdAt == request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidId(userId) && isValidUser(incoming());
+      allow update: if isSignedIn() && request.auth.uid == userId && isValidId(userId) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['username', 'bio', 'photoUrl', 'updatedAt'])
+      );
+      
+      match /followers/{followerId} {
+         allow get: if isSignedIn() && isValidId(followerId);
+         allow list: if isSignedIn();
+         allow create: if isSignedIn() && request.auth.uid == followerId && isValidId(followerId) && isValidFollow(incoming(), followerId, userId);
+         allow delete: if isSignedIn() && request.auth.uid == followerId && isValidId(followerId);
+      }
+      match /following/{followingId} {
+         allow get: if isSignedIn() && isValidId(followingId);
+         allow list: if isSignedIn();
+         allow create: if isSignedIn() && request.auth.uid == userId && isValidId(followingId) && isValidFollow(incoming(), userId, followingId);
+         allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(followingId);
+      }
+    }
+
+    match /videos/{videoId} {
+      allow get: if isSignedIn() && isValidId(videoId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(videoId) && isValidVideo(incoming());
+      allow update: if isSignedIn() && request.auth.uid == existing().userId && isValidId(videoId) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['description', 'updatedAt'])
+      );
+      allow delete: if isSignedIn() && request.auth.uid == existing().userId && isValidId(videoId) || isAdmin();
+      
+      match /likes/{likerId} {
+        allow get: if isSignedIn() && isValidId(likerId);
+        allow list: if isSignedIn();
+        allow create: if isSignedIn() && request.auth.uid == likerId && isValidId(likerId) && isValidLike(incoming());
+        allow delete: if isSignedIn() && request.auth.uid == likerId && isValidId(likerId);
+      }
+      
+      match /comments/{commentId} {
+        allow get: if isSignedIn() && isValidId(commentId);
+        allow list: if isSignedIn();
+        allow create: if isSignedIn() && isValidId(commentId) && isValidComment(incoming());
+        allow delete: if isSignedIn() && isValidId(commentId) && (request.auth.uid == existing().userId || isAdmin());
+      }
+    }
+
+    match /chats/{chatId} {
+      allow get: if isSignedIn() && isValidId(chatId) && request.auth.uid in resource.data.participants;
+      allow list: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn() && isValidId(chatId) && isValidChat(incoming());
+      allow update: if isSignedIn() && isValidId(chatId) && request.auth.uid in existing().participants && (
+         incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt'])
+      );
+      
+      match /messages/{messageId} {
+        allow get: if isSignedIn() && isValidId(messageId) && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow list: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isSignedIn() && isValidId(messageId) && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants && isValidMessage(incoming());
+      }
+    }
+
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId);
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(adminId) && (isAdmin() || request.auth.token.email == 'AtaullahAtakalimi@gmail.com');
+      allow delete: if isAdmin() && isValidId(adminId);
+    }
+  }
+}

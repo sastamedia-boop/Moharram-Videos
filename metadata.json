@@ -1,0 +1,11 @@
+{
+  "name": "Moharram Video",
+  "description": "Short form video platform with an elegant Islamic style UI, dark theme, vertical scrolling Reels, chats, and profiles.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

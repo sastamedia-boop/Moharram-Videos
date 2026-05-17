@@ -15,6 +15,8 @@ export function Profile() {
   const [instagram, setInstagram] = useState(profile?.socialLinks?.instagram || '');
   const [twitter, setTwitter] = useState(profile?.socialLinks?.twitter || '');
   const [whatsapp, setWhatsapp] = useState(profile?.socialLinks?.whatsapp || '');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
@@ -40,19 +42,48 @@ export function Profile() {
   // Note: Standard image upload is mocked or limited when the user isn't fully set up.
   // We will build standard logic for image upload if needed.
 
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAvatarFile(file);
+      setAvatarPreview(URL.createObjectURL(file));
+    }
+  };
+
   const handleSave = async () => {
     if (!user) return;
     setLoading(true);
     try {
+      let finalPhotoUrl = profile?.photoUrl || null;
+
+      if (avatarFile) {
+        const storageRef = ref(storage, `users/${user.uid}/profile_${Date.now()}`);
+        const uploadTask = uploadBytesResumable(storageRef, avatarFile);
+        
+        await new Promise((resolve, reject) => {
+          uploadTask.on(
+            'state_changed',
+            null,
+            (error) => reject(error),
+            () => resolve(uploadTask.snapshot)
+          );
+        });
+
+        finalPhotoUrl = await getDownloadURL(uploadTask.snapshot.ref);
+      }
+
       const socialLinks = { facebook, instagram, twitter, whatsapp };
       await updateDoc(doc(db, 'users', user.uid), {
         username,
         bio,
         socialLinks,
+        ...(finalPhotoUrl ? { photoUrl: finalPhotoUrl } : {}),
         updatedAt: serverTimestamp(),
       });
-      updateLocalProfile({ username, bio, socialLinks });
+      updateLocalProfile({ username, bio, socialLinks, photoUrl: finalPhotoUrl || undefined });
       setEditing(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
     } finally {
@@ -72,12 +103,18 @@ export function Profile() {
       <div className="px-6 py-8 flex flex-col items-center">
         <div className="relative mb-4">
           <div className="w-24 h-24 bg-stone-800 rounded-full flex items-center justify-center overflow-hidden border-2 border-emerald-600">
-            {profile?.photoUrl ? (
-              <img src={profile.photoUrl} alt={profile.username} className="w-full h-full object-cover" />
+            {(avatarPreview || profile?.photoUrl) ? (
+              <img src={avatarPreview || profile?.photoUrl} alt={profile?.username} className="w-full h-full object-cover" />
             ) : (
               <span className="text-3xl font-bold text-stone-500">{profile?.username?.charAt(0).toUpperCase()}</span>
             )}
           </div>
+          {editing && (
+            <label className="absolute bottom-0 right-0 w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center cursor-pointer hover:bg-emerald-500 transition-colors border border-stone-950">
+              <Camera size={14} className="text-white" />
+              <input type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
+            </label>
+          )}
         </div>
 
         {editing ? (

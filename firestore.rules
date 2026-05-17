@@ -9,7 +9,7 @@ service cloud.firestore {
     function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
     function incoming() { return request.resource.data; }
     function existing() { return resource.data; }
-    function isAdmin() { return isSignedIn() && (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) || request.auth.token.email == 'AtaullahAtakalimi@gmail.com'); }
+    function isAdmin() { return isSignedIn() && (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) || request.auth.token.email.lower() == 'ataullahatakalimi@gmail.com'); }
 
     function isValidUser(data) {
       return data.keys().hasAll(['username', 'createdAt'])
@@ -17,6 +17,7 @@ service cloud.firestore {
         && data.createdAt == request.time
         && (!('bio' in data) || (data.bio is string && data.bio.size() <= 500))
         && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 2000))
+        && (!('socialLinks' in data) || data.socialLinks is map)
         && (!('isAdmin' in data) || data.isAdmin == false);
     }
     
@@ -25,7 +26,8 @@ service cloud.firestore {
           && data.userId == request.auth.uid
           && data.videoUrl is string && data.videoUrl.size() <= 2000
           && data.createdAt == request.time
-          && (!('description' in data) || (data.description is string && data.description.size() <= 500));
+          && (!('description' in data) || (data.description is string && data.description.size() <= 500))
+          && (!('mediaType' in data) || (data.mediaType is string && (data.mediaType == 'image' || data.mediaType == 'video')));
     }
 
     function isValidLike(data) {
@@ -69,7 +71,8 @@ service cloud.firestore {
       allow list: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userId && isValidId(userId) && isValidUser(incoming());
       allow update: if isSignedIn() && request.auth.uid == userId && isValidId(userId) && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['username', 'bio', 'photoUrl', 'updatedAt'])
+        incoming().diff(existing()).affectedKeys().hasOnly(['username', 'bio', 'photoUrl', 'socialLinks', 'updatedAt']) &&
+        (!('socialLinks' in incoming()) || incoming().socialLinks is map)
       );
       
       match /followers/{followerId} {
@@ -93,7 +96,7 @@ service cloud.firestore {
       allow update: if isSignedIn() && request.auth.uid == existing().userId && isValidId(videoId) && (
         incoming().diff(existing()).affectedKeys().hasOnly(['description', 'updatedAt'])
       );
-      allow delete: if isSignedIn() && request.auth.uid == existing().userId && isValidId(videoId) || isAdmin();
+      allow delete: if isSignedIn() && isValidId(videoId) && (request.auth.uid == existing().userId || isAdmin());
       
       match /likes/{likerId} {
         allow get: if isSignedIn() && isValidId(likerId);
@@ -111,16 +114,17 @@ service cloud.firestore {
     }
 
     match /chats/{chatId} {
-      allow get: if isSignedIn() && isValidId(chatId) && request.auth.uid in resource.data.participants;
-      allow list: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow get: if isSignedIn() && isValidId(chatId) && (request.auth.uid in resource.data.participants || isAdmin());
+      allow list: if isSignedIn() && (request.auth.uid in resource.data.participants || isAdmin());
       allow create: if isSignedIn() && isValidId(chatId) && isValidChat(incoming());
       allow update: if isSignedIn() && isValidId(chatId) && request.auth.uid in existing().participants && (
          incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'updatedAt'])
       );
+      allow delete: if isAdmin() && isValidId(chatId);
       
       match /messages/{messageId} {
-        allow get: if isSignedIn() && isValidId(messageId) && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
-        allow list: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow get: if isSignedIn() && isValidId(messageId) && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
+        allow list: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
         allow create: if isSignedIn() && isValidId(messageId) && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants && isValidMessage(incoming());
       }
     }
@@ -128,7 +132,8 @@ service cloud.firestore {
     match /admins/{adminId} {
       allow get: if isSignedIn() && isValidId(adminId);
       allow list: if isAdmin();
-      allow create: if isSignedIn() && isValidId(adminId) && (isAdmin() || request.auth.token.email == 'AtaullahAtakalimi@gmail.com');
+      allow create: if isSignedIn() && isValidId(adminId) && (isAdmin() || request.auth.token.email.lower() == 'ataullahatakalimi@gmail.com');
+      allow update: if isAdmin() && isValidId(adminId);
       allow delete: if isAdmin() && isValidId(adminId);
     }
   }

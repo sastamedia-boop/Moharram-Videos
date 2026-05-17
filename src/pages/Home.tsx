@@ -63,8 +63,12 @@ export function Home() {
               </div>
             </div>
             
-            <div className="w-full aspect-video bg-black relative">
-               <video src={video.videoUrl} className="w-full h-full object-cover" controls preload="metadata" />
+            <div className="w-full aspect-[9/16] max-h-[60vh] bg-black flex items-center justify-center">
+               {video.mediaType === 'image' ? (
+                 <img src={video.videoUrl} className="w-full h-full object-contain" alt="Post" />
+               ) : (
+                 <video src={video.videoUrl} className="w-full h-full object-contain" controls preload="metadata" />
+               )}
             </div>
 
             <div className="p-4">

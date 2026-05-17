@@ -39,11 +39,12 @@ export function Upload() {
           await setDoc(videoRef, {
             userId: user.uid,
             videoUrl: downloadURL,
+            mediaType: file.type.startsWith('image/') ? 'image' : 'video',
             description,
             createdAt: serverTimestamp(),
           });
           
-          navigate('/videos');
+          navigate('/');
         }
       );
     } catch (e) {
@@ -55,29 +56,37 @@ export function Upload() {
   return (
     <div className="h-full bg-stone-950 overflow-y-auto no-scrollbar pb-24">
       <div className="sticky top-0 bg-stone-950/80 backdrop-blur-md px-6 py-4 z-10 border-b border-stone-800">
-        <h1 className="text-xl font-bold">Upload Video</h1>
+        <h1 className="text-xl font-bold">Upload Media</h1>
       </div>
 
       <div className="p-6">
         {!file ? (
           <label className="w-full aspect-[9/16] max-h-96 border-2 border-dashed border-stone-800 rounded-2xl flex flex-col items-center justify-center text-stone-500 cursor-pointer hover:border-emerald-500/50 hover:bg-stone-900/50 transition-colors">
             <UploadCloud size={48} className="mb-4" />
-            <span className="font-medium">Select Video</span>
+            <span className="font-medium">Select Video or Photo</span>
             <input 
               type="file" 
-              accept="video/*" 
+              accept="video/*,image/*" 
               className="hidden" 
               onChange={e => setFile(e.target.files?.[0] || null)}
             />
           </label>
         ) : (
           <div className="space-y-6">
-            <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-stone-800">
-              <video 
-                src={URL.createObjectURL(file)} 
-                className="w-full h-full object-cover" 
-                controls 
-              />
+            <div className="relative w-full aspect-[9/16] max-h-[60vh] bg-black rounded-xl overflow-hidden border border-stone-800 flex items-center justify-center">
+              {file.type.startsWith('image/') ? (
+                <img 
+                  src={URL.createObjectURL(file)} 
+                  className="w-full h-full object-contain" 
+                  alt="Preview"
+                />
+              ) : (
+                <video 
+                  src={URL.createObjectURL(file)} 
+                  className="w-full h-full object-contain" 
+                  controls 
+                />
+              )}
               <button 
                 onClick={() => setFile(null)}
                 className="absolute top-2 right-2 bg-black/50 backdrop-blur px-3 py-1 rounded-full text-xs"
@@ -102,7 +111,7 @@ export function Upload() {
               disabled={loading}
               className="w-full bg-emerald-600 hover:bg-emerald-500 transition-colors text-white font-bold py-4 rounded-xl flex items-center justify-center relative overflow-hidden"
             >
-              {loading ? `Uploading... ${progress}%` : 'Post Video'}
+              {loading ? `Uploading... ${progress}%` : 'Post Media'}
               {loading && (
                 <div 
                   className="absolute left-0 bottom-0 top-0 bg-emerald-700 -z-10 transition-all duration-300"

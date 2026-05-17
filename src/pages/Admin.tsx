@@ -164,8 +164,11 @@ export function Admin() {
                   {recentVideos.map(video => (
                     <div key={video.id} className="bg-stone-900 border border-stone-800 rounded-2xl p-4 flex gap-4 items-center">
                       <div className="w-16 h-24 bg-stone-800 rounded-lg overflow-hidden shrink-0">
-                         {/* Display video thumbnail if available or video tag */}
-                         <video src={video.videoUrl} className="w-full h-full object-cover" muted playsInline />
+                         {video.mediaType === 'image' ? (
+                           <img src={video.videoUrl} className="w-full h-full object-cover" alt="Post" />
+                         ) : (
+                           <video src={video.videoUrl} className="w-full h-full object-cover" muted playsInline />
+                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-stone-100 text-sm truncate">{video.userId}</p>
